@@ -14,6 +14,22 @@ export interface AnimatedRoomNPC {
   update: (dt: number, elapsed: number) => void;
 }
 
+export type MovieNpcStoryMode = 'watching' | 'reacting' | 'attack' | 'chase' | 'angry_idle';
+
+export interface House1MovieNPC extends AnimatedRoomNPC {
+  setStoryMode: (
+    mode: MovieNpcStoryMode,
+    opts?: {
+      localPos?: THREE.Vector3;
+      yaw?: number;
+      moveSpeed?: number;
+      attackProgress?: number;
+      lookYawOffset?: number;
+    }
+  ) => void;
+  getHeadWorldPosition: (out: THREE.Vector3) => THREE.Vector3;
+}
+
 function makeRgbBarTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 256;
@@ -355,16 +371,20 @@ function makeMoviePhoneTexture(): {
  * House 1 (2nd floor) NPC lying comfortably propped against pillows on the bed,
  * gripping a smartphone with both hands and watching a movie while the screen's
  * PointLight illuminates his face, hands, and pillows.
+ * Also supports transitioning into an articulated standing/attack/chase rig for the Story Mode cutscene.
  */
 export function buildHouse1PhoneWatcherNPC(
   bedX: number,
   bedY: number,
   bedZ: number,
   rotY: number
-): AnimatedRoomNPC {
+): House1MovieNPC {
+  const rootGroup = new THREE.Group();
+
   const group = new THREE.Group();
   group.position.set(bedX, bedY, bedZ);
   group.rotation.y = rotY;
+  rootGroup.add(group);
 
   const skinMat = new THREE.MeshStandardMaterial({ color: 0xdfb18c, roughness: 0.62 });
   const hairMat = new THREE.MeshStandardMaterial({ color: 0x211915, roughness: 0.84 });
@@ -526,6 +546,135 @@ export function buildHouse1PhoneWatcherNPC(
 
   group.add(person);
 
+  // Dropped smartphone resting on duvet when NPC jumps off the bed
+  const droppedPhone = new THREE.Mesh(
+    new THREE.BoxGeometry(0.17, 0.016, 0.095),
+    new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.3, metalness: 0.7 })
+  );
+  droppedPhone.position.set(0.12, 0.565, 0.16);
+  droppedPhone.rotation.y = 0.38;
+  droppedPhone.visible = false;
+  group.add(droppedPhone);
+
+  // Articulated standing/chasing rig (same outfit/appearance) used during attack & chase beats
+  const actionRig = new THREE.Group();
+  actionRig.visible = false;
+
+  const aTorso = new THREE.Group();
+  aTorso.position.y = 0.88;
+  const aChest = new THREE.Mesh(new THREE.CylinderGeometry(0.185, 0.155, 0.52, 12), hoodieMat);
+  aChest.scale.set(1.12, 1, 0.74);
+  aChest.position.y = 0.27;
+  aChest.castShadow = true;
+  aTorso.add(aChest);
+
+  const aCollar = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.032, 8, 14), hoodieMat);
+  aCollar.rotation.x = Math.PI / 2;
+  aCollar.position.set(0, 0.51, -0.02);
+  aTorso.add(aCollar);
+
+  const aNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.1, 10), skinMat);
+  aNeck.position.y = 0.57;
+  aTorso.add(aNeck);
+
+  const aHeadGroup = new THREE.Group();
+  aHeadGroup.position.y = 0.7;
+  const aHead = new THREE.Mesh(new THREE.SphereGeometry(0.132, 16, 14), skinMat);
+  aHead.scale.set(0.92, 1.06, 0.96);
+  aHead.castShadow = true;
+  aHeadGroup.add(aHead);
+
+  const aNose = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.044, 6), skinMat);
+  aNose.rotation.x = Math.PI / 2;
+  aNose.position.set(0, -0.01, 0.13);
+  aHeadGroup.add(aNose);
+  for (const ex of [-0.042, 0.042]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), eyeMat);
+    eye.position.set(ex, 0.022, 0.118);
+    aHeadGroup.add(eye);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.01, 0.014), hairMat);
+    brow.position.set(ex, 0.042, 0.12);
+    brow.rotation.z = ex < 0 ? -0.22 : 0.22; // Angry furrowed brow
+    aHeadGroup.add(brow);
+  }
+  const aHair = new THREE.Mesh(
+    new THREE.SphereGeometry(0.138, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.46),
+    hairMat
+  );
+  aHair.position.set(0, 0.032, -0.018);
+  aHair.rotation.x = -0.3;
+  aHeadGroup.add(aHair);
+  aTorso.add(aHeadGroup);
+
+  const makeActionArm = (x: number) => {
+    const ap = new THREE.Group();
+    ap.position.set(x, 0.48, 0);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.04, 0.48, 10), hoodieMat);
+    arm.position.y = -0.22;
+    arm.castShadow = true;
+    ap.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 8), skinMat);
+    hand.position.y = -0.47;
+    ap.add(hand);
+    aTorso.add(ap);
+    return ap;
+  };
+  const aLeftArm = makeActionArm(-0.24);
+  const aRightArm = makeActionArm(0.24);
+  actionRig.add(aTorso);
+
+  const makeActionLeg = (x: number) => {
+    const lp = new THREE.Group();
+    lp.position.set(x, 0.86, 0);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.074, 0.052, 0.78, 10), pantsMat);
+    leg.position.y = -0.39;
+    leg.castShadow = true;
+    lp.add(leg);
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.07, 0.19), sockMat);
+    shoe.position.set(0, -0.8, 0.035);
+    lp.add(shoe);
+    actionRig.add(lp);
+    return lp;
+  };
+  const aLeftLeg = makeActionLeg(-0.095);
+  const aRightLeg = makeActionLeg(0.095);
+  rootGroup.add(actionRig);
+
+  let mode: MovieNpcStoryMode = 'watching';
+  let actionMoveSpeed = 0;
+  let attackProgress = 0;
+  let lookYawOffset = 0;
+  let chaseCycle = 0;
+
+  const setStoryMode: House1MovieNPC['setStoryMode'] = (nextMode, opts) => {
+    mode = nextMode;
+    actionMoveSpeed = opts?.moveSpeed ?? 0;
+    attackProgress = opts?.attackProgress ?? 0;
+    lookYawOffset = opts?.lookYawOffset ?? 0;
+
+    const onBed = mode === 'watching' || mode === 'reacting';
+    person.visible = onBed;
+    droppedPhone.visible = !onBed;
+    actionRig.visible = !onBed;
+
+    if (!onBed && opts?.localPos) {
+      actionRig.position.copy(opts.localPos);
+    }
+    if (!onBed && opts?.yaw !== undefined) {
+      actionRig.rotation.y = opts.yaw;
+    }
+  };
+
+  const getHeadWorldPosition: House1MovieNPC['getHeadWorldPosition'] = (out) => {
+    if (mode === 'watching' || mode === 'reacting') {
+      headGroup.getWorldPosition(out);
+    } else {
+      aHeadGroup.getWorldPosition(out);
+    }
+    out.y += 0.28;
+    return out;
+  };
+
   let frameTick = 0;
   const update = (dt: number, elapsed: number) => {
     frameTick += dt;
@@ -548,12 +697,43 @@ export function buildHouse1PhoneWatcherNPC(
       movie.tex.needsUpdate = true;
 
       faceLight.color.setHSL(hue / 360, 0.65, 0.72);
-      faceLight.intensity = 2.2 + Math.sin(elapsed * 7.5) * 0.45;
+      faceLight.intensity = mode === 'watching' ? 2.2 + Math.sin(elapsed * 7.5) * 0.45 : 0.9;
     }
-    headGroup.rotation.y = Math.sin(elapsed * 0.7) * 0.05;
+
+    if (mode === 'watching') {
+      headGroup.rotation.x = 0.92;
+      headGroup.rotation.y = Math.sin(elapsed * 0.7) * 0.05;
+    } else if (mode === 'reacting') {
+      headGroup.rotation.x = 0.48;
+      headGroup.rotation.y = lookYawOffset;
+    } else if (mode === 'attack') {
+      const swing = Math.sin(attackProgress * Math.PI);
+      aTorso.rotation.x = 0.24 * swing;
+      aRightArm.rotation.x = -0.4 - swing * 1.45;
+      aRightArm.rotation.z = -0.25 * swing;
+      aLeftArm.rotation.x = -0.55;
+      aLeftLeg.rotation.x = 0.18;
+      aRightLeg.rotation.x = -0.22;
+    } else if (mode === 'chase') {
+      chaseCycle += dt * Math.max(3, actionMoveSpeed * 2.4);
+      const amp = 0.68;
+      aTorso.rotation.x = 0.14;
+      aLeftLeg.rotation.x = Math.sin(chaseCycle) * amp;
+      aRightLeg.rotation.x = -Math.sin(chaseCycle) * amp;
+      aLeftArm.rotation.x = -Math.sin(chaseCycle) * amp * 0.85;
+      aRightArm.rotation.x = -0.75 + Math.sin(chaseCycle) * amp * 0.5;
+      aRightArm.rotation.z = 0;
+    } else if (mode === 'angry_idle') {
+      aTorso.rotation.x = 0.06;
+      aLeftLeg.rotation.x *= 0.85;
+      aRightLeg.rotation.x *= 0.85;
+      aRightArm.rotation.x = -1.65 + Math.sin(elapsed * 13) * 0.48;
+      aLeftArm.rotation.x = -0.85 + Math.cos(elapsed * 9.5) * 0.28;
+      aRightArm.rotation.z = 0;
+    }
   };
 
-  return { group, update };
+  return { group: rootGroup, update, setStoryMode, getHeadWorldPosition };
 }
 
 /**

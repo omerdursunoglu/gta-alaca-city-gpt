@@ -46,7 +46,7 @@ try {
   // Verify all 17 audio files return HTTP 200 on preview server
   const audioStatus = await page.evaluate(async () => {
     const names = [
-      'ambient_street.mp3', 'ambient_indoor.mp3',
+      'ambient_birds.mp3', 'ambient_wind.mp3',
       'footstep_stone_0.mp3', 'footstep_stone_1.mp3',
       'footstep_wood_0.mp3', 'footstep_wood_1.mp3',
       'door_open.mp3', 'door_close.mp3', 'water_splash.mp3',

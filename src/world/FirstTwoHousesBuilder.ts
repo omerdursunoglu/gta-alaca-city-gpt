@@ -6,6 +6,7 @@ import {
   buildGamingSetup,
   buildHouse1PhoneWatcherNPC,
   buildHouse2HandsomePCNPC,
+  House1MovieNPC,
 } from './InteriorDetailsBuilder';
 
 export interface HousesBuildResult {
@@ -14,6 +15,9 @@ export interface HousesBuildResult {
   stairRamps: StairRamp[];
   interactables: InteractableItem[];
   interiorLights: THREE.PointLight[];
+  house1Origin: THREE.Vector3;
+  house1MovieNpc: House1MovieNPC;
+  openHouse1Door: () => boolean;
   update: (dt: number) => void;
 }
 
@@ -1163,12 +1167,23 @@ export function buildFirstTwoHouses(
     gamingSetup.update(elapsed, h2PcNpc.isUsingPc());
   };
 
+  const openHouse1Door = (): boolean => {
+    if (isDoorOpen) return false;
+    isDoorOpen = true;
+    doorCollider.enabled = false;
+    onDoorToggle(true);
+    return true;
+  };
+
   return {
     group,
     colliders,
     stairRamps,
     interactables,
     interiorLights,
+    house1Origin: new THREE.Vector3(h1X, 0, h1Z),
+    house1MovieNpc: h1PhoneNpc,
+    openHouse1Door,
     update,
   };
 }

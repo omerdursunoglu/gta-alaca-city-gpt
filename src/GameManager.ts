@@ -7,6 +7,7 @@ import { NPCManager } from './systems/NPCManager';
 import { PerformanceManager } from './systems/PerformanceManager';
 import { PhysicsManager } from './systems/PhysicsManager';
 import { PlayerController } from './systems/PlayerController';
+import { StoryCutsceneManager } from './systems/StoryCutsceneManager';
 import { ThirdPersonCamera } from './systems/ThirdPersonCamera';
 import { UIManager } from './systems/UIManager';
 import { WeaponManager } from './systems/WeaponManager';
@@ -27,7 +28,9 @@ export class GameManager {
   private weapons: WeaponManager;
   private npcs: NPCManager;
   private cats: CatManager;
+  private storyCutscene: StoryCutsceneManager;
   private ui: UIManager;
+  private wasOnH1SecondFloor = false;
 
   private phase: GamePhase = 'menu';
   private settings: GameSettings = {
@@ -91,12 +94,15 @@ export class GameManager {
     this.cats = new CatManager();
     this.scene.add(this.cats.group);
 
+    this.storyCutscene = new StoryCutsceneManager();
+
     this.ui = new UIManager(root, this.settings, this.input, {
       onStart: () => this.startGame(),
       onResume: () => this.resumeGame(),
       onPause: () => this.pauseGame(),
       onMainMenu: () => this.goMainMenu(),
       onSettingsChanged: (s) => this.applySettings(s),
+      onStorySkip: () => this.storyCutscene.skip(),
     });
 
     this.applySettings(this.settings);
@@ -123,6 +129,8 @@ export class GameManager {
 
   private startGame(): void {
     this.audio.unlock();
+    this.storyCutscene.reset();
+    this.wasOnH1SecondFloor = false;
     this.player.resetSpawn();
     this.cameraCtrl.yaw = 0; // Look South toward Alaca Mescit Camii & House 1/2 on the left
     this.cameraCtrl.pitch = 0.22;
@@ -143,11 +151,12 @@ export class GameManager {
     if (this.phase !== 'paused') return;
     this.audio.unlock();
     this.phase = 'playing';
-    this.input.setGameplayActive(true);
+    this.input.setGameplayActive(!this.storyCutscene.isActive);
     this.ui.setPhase('playing');
   }
 
   private goMainMenu(): void {
+    this.storyCutscene.reset();
     this.phase = 'menu';
     this.input.setGameplayActive(false);
     this.ui.setPhase('menu');
@@ -183,10 +192,25 @@ export class GameManager {
       triggerInteract: () => {
         this.interactions.nearestItem?.onInteract();
       },
+      triggerMovieCutscene: () => {
+        this.storyCutscene.start(
+          this.world,
+          this.player,
+          this.cameraCtrl,
+          this.audio,
+          this.ui,
+          () => this.input.setGameplayActive(false),
+          () => this.input.setGameplayActive(true)
+        );
+      },
       getState: () => ({
         phase: this.phase,
         playerPos: this.player.position.toArray(),
+        playerHealth: this.player.health,
         isIndoors: this.player.isIndoors,
+        cutsceneActive: this.storyCutscene.isActive,
+        cutsceneStage: this.storyCutscene.stage,
+        cutsceneElapsed: Number(this.storyCutscene.elapsed.toFixed(2)),
         fpsLimit: this.performance.fpsLimit,
         actualFps: this.performance.actualFps,
         weapon: this.weapons.activeId,
@@ -212,32 +236,62 @@ export class GameManager {
       }
 
       if (this.phase === 'playing') {
-        // Sub-step physics if dt > 1/60s so 30 FPS cap stays rock-solid
-        const subSteps = dt > 0.022 ? 2 : 1;
-        const subDt = dt / subSteps;
-        for (let s = 0; s < subSteps; s++) {
-          this.player.update(subDt, this.input, this.cameraCtrl, this.physics, this.audio);
+        if (this.storyCutscene.isActive) {
+          this.storyCutscene.update(dt, Boolean(this.externalCameraOverride));
+        } else {
+          // Sub-step physics if dt > 1/60s so 30 FPS cap stays rock-solid
+          const subSteps = dt > 0.022 ? 2 : 1;
+          const subDt = dt / subSteps;
+          for (let s = 0; s < subSteps; s++) {
+            this.player.update(subDt, this.input, this.cameraCtrl, this.physics, this.audio);
+          }
+
+          this.interactions.update(this.player.position, this.input);
+          this.weapons.update(
+            dt,
+            this.input,
+            this.player,
+            this.cameraCtrl,
+            this.physics,
+            this.npcs,
+            this.cats,
+            this.audio
+          );
+
+          const onH1SecondFloor =
+            this.player.position.y > 2.65 &&
+            this.player.position.x > 9.4 &&
+            this.player.position.x < 18.6 &&
+            this.player.position.z > -9.0 &&
+            this.player.position.z < 1.0;
+          if (onH1SecondFloor && !this.wasOnH1SecondFloor) {
+            this.wasOnH1SecondFloor = true;
+            this.ui.showToast('Üst katta yatakta film izleyen bir adam var. Yanına yaklaşabilirsin.', 3.2);
+          } else if (!onH1SecondFloor) {
+            this.wasOnH1SecondFloor = false;
+          }
+
+          this.storyCutscene.checkTrigger(
+            dt,
+            this.player.position,
+            this.world,
+            this.player,
+            this.cameraCtrl,
+            this.audio,
+            this.ui,
+            () => this.input.setGameplayActive(false),
+            () => this.input.setGameplayActive(true)
+          );
         }
 
         this.world.update(dt, this.player.position);
-        this.interactions.update(this.player.position, this.input);
-        this.weapons.update(
-          dt,
-          this.input,
-          this.player,
-          this.cameraCtrl,
-          this.physics,
-          this.npcs,
-          this.cats,
-          this.audio
-        );
         this.npcs.update(dt, this.player.position, this.physics);
         this.cats.update(dt, this.player.position, this.player.isSprinting, this.physics, this.audio);
 
         if (this.externalCameraOverride) {
           this.cameraCtrl.camera.position.set(...this.externalCameraOverride.pos);
           this.cameraCtrl.camera.lookAt(...this.externalCameraOverride.target);
-        } else {
+        } else if (!this.storyCutscene.isActive) {
           this.cameraCtrl.update(
             dt,
             this.player.position,
@@ -284,6 +338,7 @@ export class GameManager {
   dispose(): void {
     cancelAnimationFrame(this.rafId);
     window.removeEventListener('resize', this.onResize);
+    this.storyCutscene.dispose();
     this.input.dispose();
     this.renderer.dispose();
   }

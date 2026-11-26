@@ -29,4 +29,4 @@ Bu projedeki tüm 3D varlıklar, malzemeler ve sesler harici indirme gerektirmed
 
 ## 3. Prosedürel PBR Dokular ve Sesler
 - **Dokular (`src/textures/ProceduralPBR.ts`):** `rubbleStone`, `cutStone`, `almasikBrickStone`, `seljukMinaretBrick`, `kiremitRoof`, `agedTimber`, `plaster`, `cobblestone`, `courtyardFlagstone`, `asphalt`, `kilimRug`
-- **Sesler (`public/audio/*.mp3`, `src/systems/AudioManager.ts`):** CC0 1.0 lisanslı 17 gerçek ses kaydı (`ambient_street.mp3`, `ambient_indoor.mp3`, `footstep_stone_0/1.mp3`, `footstep_wood_0/1.mp3`, `door_open/close.mp3`, `water_splash.mp3`, `punch.mp3`, `knife.mp3`, `pistol.mp3`, `smg.mp3`, `reload.mp3`, `npc_react.mp3`, `cat_meow_0/1.mp3`)
+- **Sesler (`public/audio/*.mp3`, `src/systems/AudioManager.ts`):** CC0 1.0 lisanslı 17 gerçek ses kaydı (`ambient_birds.mp3`, `ambient_wind.mp3`, `footstep_stone_0/1.mp3`, `footstep_wood_0/1.mp3`, `door_open/close.mp3`, `water_splash.mp3`, `punch.mp3`, `knife.mp3`, `pistol.mp3`, `smg.mp3`, `reload.mp3`, `npc_react.mp3`, `cat_meow_0/1.mp3`)

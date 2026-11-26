@@ -11,6 +11,16 @@ export class UIManager {
   private pauseOverlay!: HTMLElement;
   private hudLayer!: HTMLElement;
   private mobileLayer!: HTMLElement;
+  private storyOverlay!: HTMLElement;
+  private storySubtitleEl!: HTMLElement;
+  private storySpeakerEl!: HTMLElement;
+  private storyLineEl!: HTMLElement;
+  private storyWatchPill!: HTMLElement;
+  private storyWatchText!: HTMLElement;
+  private storyWatchFill!: HTMLElement;
+  private storyBubbleEl!: HTMLElement;
+  private storyModeActive = false;
+  private currentPhase: GamePhase = 'menu';
 
   // HUD elements
   private healthFill!: HTMLElement;
@@ -31,6 +41,7 @@ export class UIManager {
   private onPause: () => void;
   private onMainMenu: () => void;
   private onSettingsChanged: (s: GameSettings) => void;
+  private onStorySkip?: () => void;
 
   constructor(
     root: HTMLElement,
@@ -42,6 +53,7 @@ export class UIManager {
       onPause: () => void;
       onMainMenu: () => void;
       onSettingsChanged: (s: GameSettings) => void;
+      onStorySkip?: () => void;
     }
   ) {
     this.root = root;
@@ -52,6 +64,7 @@ export class UIManager {
     this.onPause = callbacks.onPause;
     this.onMainMenu = callbacks.onMainMenu;
     this.onSettingsChanged = callbacks.onSettingsChanged;
+    this.onStorySkip = callbacks.onStorySkip;
 
     this.buildDOM();
     this.syncSettingsUI();
@@ -195,6 +208,41 @@ export class UIManager {
     this.root.appendChild(this.pauseOverlay);
     this.root.appendChild(this.hudLayer);
     this.root.appendChild(this.mobileLayer);
+
+    // 5. STORY MODE CINEMATIC OVERLAY
+    this.storyOverlay = document.createElement('div');
+    this.storyOverlay.className = 'story-overlay hidden';
+    this.storyOverlay.innerHTML = `
+      <div class="letterbox-bar letterbox-top"></div>
+      <div class="letterbox-bar letterbox-bottom"></div>
+      <div class="story-header">
+        <div class="story-badge"><span class="story-badge-dot"></span><span>HİKAYE MODU • SAHNE</span></div>
+        <button class="story-skip-btn" data-story-skip>Sahneyi Geç (Enter)</button>
+      </div>
+      <div class="story-bubble hidden" data-story-bubble></div>
+      <div class="story-subtitle-wrap">
+        <div class="story-watch-pill hidden" data-story-watch-pill>
+          <span data-story-watch-text>Film izleniyor...</span>
+          <div class="story-watch-track"><div class="story-watch-fill" data-story-watch-fill></div></div>
+        </div>
+        <div class="story-subtitle hidden" data-story-subtitle>
+          <span class="story-speaker" data-story-speaker></span>
+          <span class="story-line" data-story-line></span>
+        </div>
+      </div>
+    `;
+    this.root.appendChild(this.storyOverlay);
+
+    this.storySubtitleEl = this.storyOverlay.querySelector('[data-story-subtitle]')!;
+    this.storySpeakerEl = this.storyOverlay.querySelector('[data-story-speaker]')!;
+    this.storyLineEl = this.storyOverlay.querySelector('[data-story-line]')!;
+    this.storyWatchPill = this.storyOverlay.querySelector('[data-story-watch-pill]')!;
+    this.storyWatchText = this.storyOverlay.querySelector('[data-story-watch-text]')!;
+    this.storyWatchFill = this.storyOverlay.querySelector('[data-story-watch-fill]')!;
+    this.storyBubbleEl = this.storyOverlay.querySelector('[data-story-bubble]')!;
+    this.storyOverlay.querySelector('[data-story-skip]')?.addEventListener('click', () => {
+      this.onStorySkip?.();
+    });
 
     this.healthFill = this.hudLayer.querySelector('[data-health-fill]')!;
     this.healthText = this.hudLayer.querySelector('[data-health-text]')!;
@@ -426,12 +474,66 @@ export class UIManager {
   }
 
   setPhase(phase: GamePhase): void {
+    this.currentPhase = phase;
     this.startOverlay.classList.toggle('hidden', phase !== 'menu');
     this.pauseOverlay.classList.toggle('hidden', phase !== 'paused');
-    this.hudLayer.classList.toggle('hidden', phase !== 'playing');
+    this.syncPlayVisibility();
+  }
 
-    const showMobile = phase === 'playing' && (this.input.isTouchDevice || window.innerWidth <= 768);
+  setStoryMode(active: boolean): void {
+    this.storyModeActive = active;
+    this.syncPlayVisibility();
+    if (!active) {
+      this.storySubtitleEl.classList.add('hidden');
+      this.storyWatchPill.classList.add('hidden');
+      this.storyBubbleEl.classList.add('hidden');
+    }
+  }
+
+  private syncPlayVisibility(): void {
+    const inPlay = this.currentPhase === 'playing';
+    this.hudLayer.classList.toggle('hidden', !inPlay || this.storyModeActive);
+    const showMobile = inPlay && !this.storyModeActive && (this.input.isTouchDevice || window.innerWidth <= 768);
     this.mobileLayer.classList.toggle('hidden', !showMobile);
+    this.storyOverlay.classList.toggle('hidden', !inPlay || !this.storyModeActive);
+  }
+
+  updateStoryUI(opts: {
+    speaker?: string | null;
+    text?: string | null;
+    angrySpeaker?: boolean;
+    watchProgress?: number | null;
+    watchSecondsLeft?: number;
+    bubble?: { text: string; x: number; y: number; angry?: boolean } | null;
+  }): void {
+    if (opts.text) {
+      this.storySpeakerEl.textContent = opts.speaker ? `${opts.speaker}:` : '';
+      this.storySpeakerEl.classList.toggle('angry', Boolean(opts.angrySpeaker));
+      this.storyLineEl.textContent = opts.text;
+      this.storySubtitleEl.classList.remove('hidden');
+    } else {
+      this.storySubtitleEl.classList.add('hidden');
+    }
+
+    if (opts.watchProgress !== null && opts.watchProgress !== undefined) {
+      const pct = Math.max(0, Math.min(100, opts.watchProgress * 100));
+      this.storyWatchFill.style.width = `${pct.toFixed(1)}%`;
+      const secs = Math.max(1, Math.ceil(opts.watchSecondsLeft ?? 0));
+      this.storyWatchText.textContent = `Film izleniyor... (${secs} sn)`;
+      this.storyWatchPill.classList.remove('hidden');
+    } else {
+      this.storyWatchPill.classList.add('hidden');
+    }
+
+    if (opts.bubble) {
+      this.storyBubbleEl.textContent = opts.bubble.text;
+      this.storyBubbleEl.style.left = `${opts.bubble.x}px`;
+      this.storyBubbleEl.style.top = `${opts.bubble.y}px`;
+      this.storyBubbleEl.classList.toggle('angry', Boolean(opts.bubble.angry));
+      this.storyBubbleEl.classList.remove('hidden');
+    } else {
+      this.storyBubbleEl.classList.add('hidden');
+    }
   }
 
   showToast(msg: string, seconds = 2.6): void {

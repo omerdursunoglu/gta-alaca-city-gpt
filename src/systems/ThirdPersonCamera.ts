@@ -29,6 +29,35 @@ export class ThirdPersonCamera {
     this.recoilPitch = Math.min(0.14, this.recoilPitch + amount);
   }
 
+  /** Aligns third-person orbit camera cleanly behind the player when exiting a cutscene */
+  snapBehindPlayer(playerPos: THREE.Vector3, yaw: number, pitch = 0.22): void {
+    this.yaw = yaw;
+    this.pitch = pitch;
+    this.distance = this.desiredDistance;
+    const shoulderRight = this.getRightXZ().multiplyScalar(0.45);
+    const pivot = new THREE.Vector3(
+      playerPos.x + shoulderRight.x,
+      playerPos.y + 1.48,
+      playerPos.z + shoulderRight.z
+    );
+    const horiz = Math.cos(pitch) * this.distance;
+    const vert = Math.sin(pitch) * this.distance;
+    this.currentPos.set(
+      pivot.x - Math.sin(yaw) * horiz,
+      pivot.y + vert,
+      pivot.z - Math.cos(yaw) * horiz
+    );
+    this.currentLookAt.set(
+      pivot.x + Math.sin(yaw) * 3.5,
+      pivot.y - Math.sin(pitch) * 1.4,
+      pivot.z + Math.cos(yaw) * 3.5
+    );
+    this.camera.fov = 58;
+    this.camera.updateProjectionMatrix();
+    this.camera.position.copy(this.currentPos);
+    this.camera.lookAt(this.currentLookAt);
+  }
+
   getForwardXZ(): THREE.Vector3 {
     return new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)).normalize();
   }

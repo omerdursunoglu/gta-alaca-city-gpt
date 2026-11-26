@@ -1,12 +1,12 @@
 /**
  * Real-world CC0 audio engine powered by Web Audio API AudioBuffer decoding.
- * All 17 MP3 samples in public/audio/ are CC0 1.0 Universal (Public Domain) recordings
- * with smooth indoor/outdoor ambient crossfading and subtle pitch variation.
+ * Outdoor atmosphere layers cheerful daytime bird chirps (ambient_birds.mp3)
+ * and a soft warm breeze (ambient_wind.mp3), softly attenuated indoors.
  */
 
 const AUDIO_FILES = {
-  ambient_street: './audio/ambient_street.mp3',
-  ambient_indoor: './audio/ambient_indoor.mp3',
+  ambient_birds: './audio/ambient_birds.mp3',
+  ambient_wind: './audio/ambient_wind.mp3',
   footstep_stone_0: './audio/footstep_stone_0.mp3',
   footstep_stone_1: './audio/footstep_stone_1.mp3',
   footstep_wood_0: './audio/footstep_wood_0.mp3',
@@ -29,8 +29,8 @@ type SoundKey = keyof typeof AUDIO_FILES;
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  private streetGain: GainNode | null = null;
-  private indoorGain: GainNode | null = null;
+  private birdsGain: GainNode | null = null;
+  private windGain: GainNode | null = null;
   private buffers = new Map<SoundKey, AudioBuffer>();
 
   private volume = 0.7;
@@ -51,13 +51,13 @@ export class AudioManager {
       this.masterGain.gain.value = this.muted ? 0 : this.volume;
       this.masterGain.connect(this.ctx.destination);
 
-      this.streetGain = this.ctx.createGain();
-      this.streetGain.gain.value = this.indoors ? 0.04 : 0.24;
-      this.streetGain.connect(this.masterGain);
+      this.birdsGain = this.ctx.createGain();
+      this.birdsGain.gain.value = this.indoors ? 0.06 : 0.32;
+      this.birdsGain.connect(this.masterGain);
 
-      this.indoorGain = this.ctx.createGain();
-      this.indoorGain.gain.value = this.indoors ? 0.22 : 0.0;
-      this.indoorGain.connect(this.masterGain);
+      this.windGain = this.ctx.createGain();
+      this.windGain.gain.value = this.indoors ? 0.03 : 0.2;
+      this.windGain.connect(this.masterGain);
 
       this.initialized = true;
     }
@@ -84,10 +84,10 @@ export class AudioManager {
           const decoded = await this.ctx.decodeAudioData(arr);
           this.buffers.set(key, decoded);
 
-          if (key === 'ambient_street' && this.streetGain) {
-            this.startLoop(decoded, this.streetGain);
-          } else if (key === 'ambient_indoor' && this.indoorGain) {
-            this.startLoop(decoded, this.indoorGain);
+          if (key === 'ambient_birds' && this.birdsGain) {
+            this.startLoop(decoded, this.birdsGain);
+          } else if (key === 'ambient_wind' && this.windGain) {
+            this.startLoop(decoded, this.windGain);
           }
         } catch {
           // Ignore individual decode failure cleanly
@@ -116,10 +116,10 @@ export class AudioManager {
   setIndoors(indoors: boolean): void {
     if (this.indoors === indoors) return;
     this.indoors = indoors;
-    if (!this.ctx || !this.streetGain || !this.indoorGain) return;
+    if (!this.ctx || !this.birdsGain || !this.windGain) return;
     const t = this.ctx.currentTime;
-    this.streetGain.gain.setTargetAtTime(indoors ? 0.04 : 0.24, t, 0.35);
-    this.indoorGain.gain.setTargetAtTime(indoors ? 0.22 : 0.0, t, 0.35);
+    this.birdsGain.gain.setTargetAtTime(indoors ? 0.06 : 0.32, t, 0.35);
+    this.windGain.gain.setTargetAtTime(indoors ? 0.03 : 0.2, t, 0.35);
   }
 
   private playBuffer(key: SoundKey, gainVal = 0.65, pitchJitter = 0.05, basePitch = 1.0): void {
@@ -179,11 +179,38 @@ export class AudioManager {
   }
 
   playNpcReact(): void {
-    this.playBuffer('npc_react', 0.48, 0.07);
+    this.playBuffer('npc_react', 0.46, 0.07);
   }
 
   playCatMeow(): void {
     const key: SoundKey = Math.random() > 0.45 ? 'cat_meow_0' : 'cat_meow_1';
     this.playBuffer(key, 0.56, 0.08);
+  }
+
+  speakTurkish(text: string, pitch = 1.0, rate = 1.0): void {
+    if (this.muted || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'tr-TR';
+      utter.pitch = pitch;
+      utter.rate = rate;
+      utter.volume = Math.max(0, Math.min(1, this.volume));
+      const trVoice = window.speechSynthesis.getVoices().find((v) => v.lang.toLowerCase().startsWith('tr'));
+      if (trVoice) utter.voice = trVoice;
+      window.speechSynthesis.speak(utter);
+    } catch {
+      // ignore speech synthesis issues on unsupported browsers
+    }
+  }
+
+  stopSpeech(): void {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // ignore
+      }
+    }
   }
 }

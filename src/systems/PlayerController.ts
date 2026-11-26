@@ -138,6 +138,102 @@ export class PlayerController {
     this.health = Math.min(this.maxHealth, this.health + amount);
   }
 
+  takeDamage(amount: number, minHealth = 1): void {
+    this.health = Math.max(minHealth, this.health - amount);
+  }
+
+  getHeadWorldPosition(out: THREE.Vector3): THREE.Vector3 {
+    return out.set(this.position.x, this.position.y + 1.92, this.position.z);
+  }
+
+  private updateIndoorStatus(audio: AudioManager): void {
+    const inH1 =
+      this.position.x > 9.5 &&
+      this.position.x < 18.5 &&
+      this.position.z > -8.9 &&
+      this.position.z < 0.9;
+    const inH2 =
+      this.position.x > 21.1 &&
+      this.position.x < 29.3 &&
+      this.position.z > -9.4 &&
+      this.position.z < 1.0;
+    this.isIndoors = inH1 || inH2;
+    this.indoorHouseName = inH1 ? 'Ev 1 İç Mekân • Tokat Konutu' : inH2 ? 'Ev 2 İç Mekân • Oyun Odası' : null;
+    audio.setIndoors(this.isIndoors);
+  }
+
+  /** Drives character position, orientation, and story-mode poses during cutscenes */
+  updateScripted(opts: {
+    dt: number;
+    pos?: THREE.Vector3;
+    yaw?: number;
+    moveSpeed?: number;
+    isSprinting?: boolean;
+    animPose?: 'idle' | 'watch' | 'talk' | 'flinch';
+    elapsed?: number;
+    audio: AudioManager;
+  }): void {
+    const { dt, pos, yaw, moveSpeed = 0, isSprinting = false, animPose = 'idle', elapsed = 0, audio } = opts;
+    if (pos) {
+      this.position.copy(pos);
+    }
+    this.velY = 0;
+    this.grounded = true;
+    this.isSprinting = isSprinting;
+    this.updateIndoorStatus(audio);
+
+    if (yaw !== undefined) {
+      let diff = yaw - this.yaw;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      this.yaw += diff * Math.min(1, dt * 12);
+    }
+
+    if (moveSpeed > 0.05) {
+      const freq = isSprinting ? 12.0 : 8.0;
+      this.walkCycle += dt * freq;
+      this.stepTimer += dt * freq;
+      if (this.stepTimer >= Math.PI) {
+        this.stepTimer -= Math.PI;
+        audio.playFootstep(this.isIndoors);
+      }
+      const swing = isSprinting ? 0.68 : 0.45;
+      this.torsoGroup.rotation.x = isSprinting ? 0.1 : 0;
+      this.leftLegPivot.rotation.x = Math.sin(this.walkCycle) * swing;
+      this.rightLegPivot.rotation.x = -Math.sin(this.walkCycle) * swing;
+      this.leftArmPivot.rotation.x = -Math.sin(this.walkCycle) * swing * 0.78;
+      this.rightArmPivot.rotation.x = Math.sin(this.walkCycle) * swing * 0.78;
+      this.rightArmPivot.rotation.z = 0;
+    } else {
+      this.leftLegPivot.rotation.x *= 0.8;
+      this.rightLegPivot.rotation.x *= 0.8;
+      if (animPose === 'watch') {
+        this.torsoGroup.rotation.x = 0.1 + Math.sin(elapsed * 1.8) * 0.015;
+        this.leftArmPivot.rotation.x = -0.15;
+        this.rightArmPivot.rotation.x = -0.15;
+        this.rightArmPivot.rotation.z = 0;
+      } else if (animPose === 'talk') {
+        this.torsoGroup.rotation.x = 0.05;
+        this.leftArmPivot.rotation.x = -0.12;
+        this.rightArmPivot.rotation.x = -0.82 + Math.sin(elapsed * 10) * 0.14;
+        this.rightArmPivot.rotation.z = 0.28;
+      } else if (animPose === 'flinch') {
+        this.torsoGroup.rotation.x = -0.24;
+        this.leftArmPivot.rotation.x = -0.95;
+        this.rightArmPivot.rotation.x = -1.05;
+        this.rightArmPivot.rotation.z = 0.3;
+      } else {
+        this.torsoGroup.rotation.x = 0;
+        this.leftArmPivot.rotation.x *= 0.8;
+        this.rightArmPivot.rotation.x *= 0.8;
+        this.rightArmPivot.rotation.z *= 0.8;
+      }
+    }
+
+    this.group.position.copy(this.position);
+    this.group.rotation.y = this.yaw;
+  }
+
   resetSpawn(): void {
     this.position.set(0.5, 0, -25.2);
     this.velY = 0;
@@ -181,20 +277,8 @@ export class PlayerController {
     this.grounded = res.grounded;
     this.velY = res.velY;
 
-    // House 1 (x: 9.5..18.5, z: -8.9..0.9) and House 2 (x: 21.1..29.3, z: -9.4..1.0) interior check
-    const inH1 =
-      this.position.x > 9.5 &&
-      this.position.x < 18.5 &&
-      this.position.z > -8.9 &&
-      this.position.z < 0.9;
-    const inH2 =
-      this.position.x > 21.1 &&
-      this.position.x < 29.3 &&
-      this.position.z > -9.4 &&
-      this.position.z < 1.0;
-    this.isIndoors = inH1 || inH2;
-    this.indoorHouseName = inH1 ? 'Ev 1 İç Mekân • Tokat Konutu' : inH2 ? 'Ev 2 İç Mekân • Oyun Odası' : null;
-    audio.setIndoors(this.isIndoors);
+    this.torsoGroup.rotation.x = 0;
+    this.updateIndoorStatus(audio);
 
     // Character orientation: face camera yaw when aiming firearm, else face movement direction
     const usingGun = this.activeWeapon === 'pistol' || this.activeWeapon === 'smg';
