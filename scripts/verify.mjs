@@ -39,9 +39,24 @@ try {
   // Screenshot 00: Start menu
   await page.screenshot({ path: '/Users/omer/Desktop/alaca2/screenshots/00_start_menu.png' });
 
-  // Start game
+  // Start game (also unlocks & preloads real CC0 audio buffers)
   await page.click('[data-action="start"]');
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(1100);
+
+  // Verify all 17 audio files return HTTP 200 on preview server
+  const audioStatus = await page.evaluate(async () => {
+    const names = [
+      'ambient_street.mp3', 'ambient_indoor.mp3',
+      'footstep_stone_0.mp3', 'footstep_stone_1.mp3',
+      'footstep_wood_0.mp3', 'footstep_wood_1.mp3',
+      'door_open.mp3', 'door_close.mp3', 'water_splash.mp3',
+      'punch.mp3', 'knife.mp3', 'pistol.mp3', 'smg.mp3',
+      'reload.mp3', 'npc_react.mp3', 'cat_meow_0.mp3', 'cat_meow_1.mp3',
+    ];
+    const results = await Promise.all(names.map(async (n) => (await fetch(`./audio/${n}`)).status));
+    return results.every((s) => s === 200) ? `ALL_17_OK` : `FAILED:${JSON.stringify(results)}`;
+  });
+  console.log('AUDIO_FILES_CHECK:', audioStatus);
 
   const initialState = await page.evaluate(() => window.__ALACA_GAME__.getState());
   console.log('INITIAL_STATE:', JSON.stringify(initialState));

@@ -108,7 +108,8 @@ export class UIManager {
           <div class="info-list">
             <p><strong>Harita & Yol Geometrisi:</strong> © OpenStreetMap contributors (ODbL 1.0) — way/1372898868 (Alaca Mescit Camii, 40.31609°N, 36.54457°E) ve çevresi.</p>
             <p><strong>Mimari Referanslar:</strong> T.C. Kültür ve Turizm Bakanlığı Kültür Portalı & Tokat Turizm Tanıtma Derneği (TUDER) halka açık envanter metinleri.</p>
-            <p><strong>3D Modeller, Dokular & Sesler:</strong> Proje için özel üretilmiş prosedürel Three.js geometrileri, PBR kanvas dokular ve Web Audio sentezleri (telif veya Google Maps içeriği kullanılmamıştır).</p>
+            <p><strong>3D Modeller & Dokular:</strong> Proje için özel üretilmiş prosedürel Three.js geometrileri ve PBR kanvas dokular (telif veya Google Maps içeriği kullanılmamıştır).</p>
+            <p><strong>Gerçek Sesler:</strong> CC0 1.0 (Kamu Malı) lisanslı gerçek ses kayıtları (lavenderdotpet/CC0-Public-Domain-Sounds, Kenney, Warfork CC0, Micro Pack - Cat Meows).</p>
           </div>
         </div>
       </div>

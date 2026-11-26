@@ -1,61 +1,108 @@
 /**
- * 100% original procedural Web Audio API sound engine (zero copyrighted audio assets).
- * Synthesizes daytime Tokat street ambiance, indoor room tone, footsteps (stone vs wood),
- * door hinge/latch, water fountain trickle, fist/knife/pistol/SMG SFX, reloads,
- * NPC vocal surprise tones, and cat meows.
+ * Real-world CC0 audio engine powered by Web Audio API AudioBuffer decoding.
+ * All 17 MP3 samples in public/audio/ are CC0 1.0 Universal (Public Domain) recordings
+ * with smooth indoor/outdoor ambient crossfading and subtle pitch variation.
  */
+
+const AUDIO_FILES = {
+  ambient_street: './audio/ambient_street.mp3',
+  ambient_indoor: './audio/ambient_indoor.mp3',
+  footstep_stone_0: './audio/footstep_stone_0.mp3',
+  footstep_stone_1: './audio/footstep_stone_1.mp3',
+  footstep_wood_0: './audio/footstep_wood_0.mp3',
+  footstep_wood_1: './audio/footstep_wood_1.mp3',
+  door_open: './audio/door_open.mp3',
+  door_close: './audio/door_close.mp3',
+  water_splash: './audio/water_splash.mp3',
+  punch: './audio/punch.mp3',
+  knife: './audio/knife.mp3',
+  pistol: './audio/pistol.mp3',
+  smg: './audio/smg.mp3',
+  reload: './audio/reload.mp3',
+  npc_react: './audio/npc_react.mp3',
+  cat_meow_0: './audio/cat_meow_0.mp3',
+  cat_meow_1: './audio/cat_meow_1.mp3',
+} as const;
+
+type SoundKey = keyof typeof AUDIO_FILES;
+
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  private ambientGain: GainNode | null = null;
-  private ambientFilter: BiquadFilterNode | null = null;
+  private streetGain: GainNode | null = null;
+  private indoorGain: GainNode | null = null;
+  private buffers = new Map<SoundKey, AudioBuffer>();
+
   private volume = 0.7;
   private muted = false;
+  private indoors = false;
   private initialized = false;
+  private loadingStarted = false;
 
   unlock(): void {
-    if (this.initialized) {
-      if (this.ctx?.state === 'suspended') {
-        void this.ctx.resume();
-      }
-      return;
-    }
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
+    if (!this.initialized) {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
 
-    this.ctx = new AudioCtx();
-    this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.value = this.muted ? 0 : this.volume;
-    this.masterGain.connect(this.ctx.destination);
+      this.ctx = new AudioCtx();
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = this.muted ? 0 : this.volume;
+      this.masterGain.connect(this.ctx.destination);
 
-    // Gentle filtered pink-ish daytime breeze ambiance
-    const bufLen = this.ctx.sampleRate * 2;
-    const noiseBuf = this.ctx.createBuffer(1, bufLen, this.ctx.sampleRate);
-    const data = noiseBuf.getChannelData(0);
-    let last = 0;
-    for (let i = 0; i < bufLen; i++) {
-      const white = Math.random() * 2 - 1;
-      last = (last + 0.03 * white) / 1.03;
-      data[i] = last * 1.8;
+      this.streetGain = this.ctx.createGain();
+      this.streetGain.gain.value = this.indoors ? 0.04 : 0.24;
+      this.streetGain.connect(this.masterGain);
+
+      this.indoorGain = this.ctx.createGain();
+      this.indoorGain.gain.value = this.indoors ? 0.22 : 0.0;
+      this.indoorGain.connect(this.masterGain);
+
+      this.initialized = true;
     }
 
+    if (this.ctx?.state === 'suspended') {
+      void this.ctx.resume();
+    }
+    if (!this.loadingStarted) {
+      this.loadingStarted = true;
+      void this.preloadAll();
+    }
+  }
+
+  private async preloadAll(): Promise<void> {
+    if (!this.ctx) return;
+    const entries = Object.entries(AUDIO_FILES) as [SoundKey, string][];
+    await Promise.all(
+      entries.map(async ([key, url]) => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return;
+          const arr = await res.arrayBuffer();
+          if (!this.ctx) return;
+          const decoded = await this.ctx.decodeAudioData(arr);
+          this.buffers.set(key, decoded);
+
+          if (key === 'ambient_street' && this.streetGain) {
+            this.startLoop(decoded, this.streetGain);
+          } else if (key === 'ambient_indoor' && this.indoorGain) {
+            this.startLoop(decoded, this.indoorGain);
+          }
+        } catch {
+          // Ignore individual decode failure cleanly
+        }
+      })
+    );
+  }
+
+  private startLoop(buf: AudioBuffer, dest: GainNode): void {
+    if (!this.ctx) return;
     const src = this.ctx.createBufferSource();
-    src.buffer = noiseBuf;
+    src.buffer = buf;
     src.loop = true;
-
-    this.ambientFilter = this.ctx.createBiquadFilter();
-    this.ambientFilter.type = 'lowpass';
-    this.ambientFilter.frequency.value = 460;
-
-    this.ambientGain = this.ctx.createGain();
-    this.ambientGain.gain.value = 0.08;
-
-    src.connect(this.ambientFilter);
-    this.ambientFilter.connect(this.ambientGain);
-    this.ambientGain.connect(this.masterGain);
+    src.connect(dest);
     src.start();
-
-    this.initialized = true;
   }
 
   setVolume(vol: number, muted: boolean): void {
@@ -67,142 +114,76 @@ export class AudioManager {
   }
 
   setIndoors(indoors: boolean): void {
-    if (!this.ctx || !this.ambientFilter || !this.ambientGain) return;
+    if (this.indoors === indoors) return;
+    this.indoors = indoors;
+    if (!this.ctx || !this.streetGain || !this.indoorGain) return;
     const t = this.ctx.currentTime;
-    this.ambientFilter.frequency.setTargetAtTime(indoors ? 180 : 480, t, 0.25);
-    this.ambientGain.gain.setTargetAtTime(indoors ? 0.035 : 0.085, t, 0.25);
+    this.streetGain.gain.setTargetAtTime(indoors ? 0.04 : 0.24, t, 0.35);
+    this.indoorGain.gain.setTargetAtTime(indoors ? 0.22 : 0.0, t, 0.35);
   }
 
-  private playNoiseBurst(duration: number, freq: number, q: number, gainPeak: number): void {
+  private playBuffer(key: SoundKey, gainVal = 0.65, pitchJitter = 0.05, basePitch = 1.0): void {
     if (!this.ctx || !this.masterGain || this.muted) return;
-    const len = Math.max(256, Math.floor(this.ctx.sampleRate * duration));
-    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-    const ch = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) {
-      ch[i] = (Math.random() * 2 - 1) * (1 - i / len);
-    }
+    const buf = this.buffers.get(key);
+    if (!buf) return;
+
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
-    const filt = this.ctx.createBiquadFilter();
-    filt.type = 'bandpass';
-    filt.frequency.value = freq;
-    filt.Q.value = q;
+    src.playbackRate.value = basePitch + (Math.random() * 2 - 1) * pitchJitter;
+
     const g = this.ctx.createGain();
-    const now = this.ctx.currentTime;
-    g.gain.setValueAtTime(gainPeak, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + duration);
-    src.connect(filt);
-    filt.connect(g);
+    g.gain.value = gainVal;
+    src.connect(g);
     g.connect(this.masterGain);
-    src.start(now);
+    src.start();
   }
 
   playFootstep(indoors: boolean): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
-    const pitch = indoors ? 180 + Math.random() * 45 : 320 + Math.random() * 80;
-    this.playNoiseBurst(0.065, pitch, indoors ? 1.8 : 0.9, indoors ? 0.14 : 0.1);
+    const idx = Math.random() > 0.5 ? 0 : 1;
+    const key: SoundKey = indoors
+      ? idx === 0
+        ? 'footstep_wood_0'
+        : 'footstep_wood_1'
+      : idx === 0
+        ? 'footstep_stone_0'
+        : 'footstep_stone_1';
+    this.playBuffer(key, indoors ? 0.42 : 0.36, 0.08);
   }
 
   playDoor(open: boolean): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(open ? 140 : 190, now);
-    osc.frequency.exponentialRampToValueAtTime(open ? 220 : 110, now + 0.18);
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.16, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-    osc.connect(g);
-    g.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.23);
+    this.playBuffer(open ? 'door_open' : 'door_close', 0.65, 0.04);
   }
 
   playWaterSplash(): void {
-    this.playNoiseBurst(0.28, 1250, 1.4, 0.16);
+    this.playBuffer('water_splash', 0.55, 0.06);
   }
 
   playPunch(): void {
-    this.playNoiseBurst(0.09, 260, 0.8, 0.24);
+    this.playBuffer('punch', 0.72, 0.08);
   }
 
   playKnife(): void {
-    this.playNoiseBurst(0.11, 1800, 2.2, 0.15);
+    this.playBuffer('knife', 0.6, 0.08);
   }
 
   playPistol(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
-    this.playNoiseBurst(0.16, 950, 0.6, 0.42);
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(190, now);
-    osc.frequency.exponentialRampToValueAtTime(42, now + 0.12);
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.32, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
-    osc.connect(g);
-    g.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.14);
+    this.playBuffer('pistol', 0.78, 0.04);
   }
 
   playSmg(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
-    this.playNoiseBurst(0.09, 1300, 0.7, 0.3);
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(220, now);
-    osc.frequency.exponentialRampToValueAtTime(65, now + 0.07);
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.16, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-    osc.connect(g);
-    g.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.085);
+    this.playBuffer('smg', 0.62, 0.05);
   }
 
   playReload(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
-    this.playNoiseBurst(0.04, 2400, 3.0, 0.16);
-    setTimeout(() => this.playNoiseBurst(0.05, 1700, 2.5, 0.2), 260);
+    this.playBuffer('reload', 0.58, 0.03);
   }
 
   playNpcReact(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(290 + Math.random() * 60, now);
-    osc.frequency.exponentialRampToValueAtTime(190, now + 0.14);
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.11, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-    osc.connect(g);
-    g.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.16);
+    this.playBuffer('npc_react', 0.48, 0.07);
   }
 
   playCatMeow(): void {
-    if (!this.ctx || !this.masterGain || this.muted) return;
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    osc.type = 'triangle';
-    const base = 540 + Math.random() * 140;
-    osc.frequency.setValueAtTime(base, now);
-    osc.frequency.exponentialRampToValueAtTime(base * 1.28, now + 0.09);
-    osc.frequency.exponentialRampToValueAtTime(base * 0.72, now + 0.28);
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.001, now);
-    g.gain.linearRampToValueAtTime(0.14, now + 0.04);
-    g.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-    osc.connect(g);
-    g.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.32);
+    const key: SoundKey = Math.random() > 0.45 ? 'cat_meow_0' : 'cat_meow_1';
+    this.playBuffer(key, 0.56, 0.08);
   }
 }
