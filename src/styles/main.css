@@ -1,0 +1,449 @@
+:root {
+  --bg-dark: rgba(13, 16, 22, 0.88);
+  --bg-panel: rgba(20, 24, 34, 0.92);
+  --accent: #e69d35;
+  --accent-bright: #ffb84d;
+  --text-main: #f4efe6;
+  --text-muted: #b3aa9c;
+  --border-subtle: rgba(230, 157, 53, 0.32);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html, body, #game-root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #101318;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: var(--text-main);
+  touch-action: none;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ==================== MENU & OVERLAYS ==================== */
+.overlay-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 25% 20%, rgba(230, 157, 53, 0.16), rgba(10, 13, 18, 0.82) 60%);
+  backdrop-filter: blur(6px);
+  z-index: 40;
+  padding: 16px;
+}
+
+.overlay-screen.hidden {
+  display: none;
+}
+
+.menu-card {
+  width: min(540px, 95vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 28px 30px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+}
+
+.game-logo {
+  font-size: clamp(28px, 5vw, 44px);
+  font-weight: 900;
+  letter-spacing: 2px;
+  line-height: 1.02;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #fff3d6 0%, #f0ad42 52%, #c96228 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 4px 20px rgba(230, 157, 53, 0.25);
+}
+
+.game-subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  padding: 12px 18px;
+  border-radius: 9px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+  text-align: center;
+}
+
+.btn:hover {
+  background: rgba(230, 157, 53, 0.18);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #e0922b, #c26422);
+  border-color: #f4b758;
+  color: #14100b;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #f1a741, #d4732d);
+}
+
+.subpanel {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.subpanel.hidden {
+  display: none;
+}
+
+.subpanel h3 {
+  font-size: 16px;
+  color: var(--accent-bright);
+  margin-bottom: 10px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.pill-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pill.active {
+  background: var(--accent);
+  border-color: var(--accent-bright);
+  color: #16110a;
+}
+
+.info-list {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.info-list strong {
+  color: var(--text-main);
+}
+
+/* ==================== IN-GAME HUD ==================== */
+.hud-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.hud-layer.hidden {
+  display: none;
+}
+
+.hud-top-left {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hud-badge {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  backdrop-filter: blur(4px);
+}
+
+.health-wrap {
+  width: 190px;
+  background: var(--bg-dark);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+.health-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.health-bar-bg {
+  height: 7px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.health-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #4fb369, #7be088);
+  transition: width 0.2s ease;
+}
+
+.hud-top-right {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.weapon-panel {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 9px 14px;
+  text-align: right;
+  min-width: 165px;
+}
+
+.weapon-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-bright);
+}
+
+.weapon-ammo {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.hud-pause-btn {
+  pointer-events: auto;
+  background: var(--bg-dark);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text-main);
+  padding: 6px 11px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(255, 255, 255, 0.78);
+  border-radius: 50%;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.75);
+}
+
+.crosshair.hidden {
+  display: none;
+}
+
+.interact-prompt {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(16, 20, 28, 0.9);
+  border: 1px solid var(--accent);
+  color: var(--text-main);
+  padding: 9px 16px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.interact-prompt.hidden {
+  display: none;
+}
+
+.toast-msg {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(440px, 46vw);
+  text-align: center;
+  background: rgba(24, 30, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .hud-top-left {
+    top: 8px;
+    left: 8px;
+    gap: 5px;
+  }
+  .hud-top-right {
+    top: 8px;
+    right: 8px;
+    gap: 5px;
+  }
+  .hud-badge {
+    padding: 5px 9px;
+    font-size: 11px;
+  }
+  .health-wrap {
+    width: 145px;
+    padding: 5px 8px;
+  }
+  .toast-msg {
+    top: auto;
+    bottom: 14px;
+    max-width: 36vw;
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+}
+
+.toast-msg.hidden {
+  display: none;
+}
+
+/* ==================== MOBILE TOUCH CONTROLS (HIDDEN ON DESKTOP) ==================== */
+.mobile-controls {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 25;
+}
+
+.mobile-controls.hidden {
+  display: none !important;
+}
+
+.joystick-zone {
+  position: absolute;
+  left: 18px;
+  bottom: 20px;
+  width: 124px;
+  height: 124px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.24);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.joystick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  border-radius: 50%;
+  background: rgba(230, 157, 53, 0.78);
+  border: 2px solid #fff3d6;
+}
+
+.camera-touch-zone {
+  position: absolute;
+  right: 0;
+  top: 56px;
+  width: 52vw;
+  height: calc(100vh - 56px);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.mobile-action-cluster {
+  position: absolute;
+  right: 16px;
+  bottom: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, 52px);
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.m-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.32);
+  background: rgba(16, 20, 28, 0.68);
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  touch-action: none;
+}
+
+.m-btn.active,
+.m-btn:active {
+  background: rgba(230, 157, 53, 0.85);
+  color: #151008;
+}
+
+.m-btn-fire {
+  background: rgba(210, 74, 48, 0.75);
+  border-color: #ff9c82;
+}

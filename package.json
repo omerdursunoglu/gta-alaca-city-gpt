@@ -1,0 +1,22 @@
+{
+  "name": "gta-alaca-city",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GTA ALACA CITY - Third-person 3D open-world mini game set around Alaca Mescit Camii in Tokat Merkez, Türkiye",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "playwright": "^1.49.1",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.3"
+  }
+}
